@@ -70,8 +70,12 @@ echo "sdk.dir=$ANDROID_HOME" > local.properties
    the manager address, add the enrollment password if the manager uses one, then tap
    **Enroll**.
 4. Allow the notification, and allow the app to run unrestricted in the background so
-   Android does not kill the connection. The **Status** tab lists anything still missing
-   under **Needs attention**.
+   Android does not kill the connection. While the agent is running it holds a wake lock
+   so the session stays up with the screen off. **Run unrestricted in background** is still
+   required on phones that kill foreground services anyway. On Android 12, also allow
+   **Alarms and reminders** if the Status tab asks, so the agent can restart itself.
+   The **Status** tab lists
+   anything still missing under **Needs attention**.
 5. Optionally, tap **Allow** next to **Device admin** to report failed unlock attempts. The
    admin only uses the "watch login" policy: it cannot lock, wipe or change the phone. If it
    is turned off later, the manager gets an alert (rule 100265).

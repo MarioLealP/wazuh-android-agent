@@ -1,12 +1,18 @@
 package io.github.hannescoetzee.wazuhagent.service
 
+import android.annotation.SuppressLint
+import android.app.AlarmManager
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.net.wifi.WifiManager
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
+import android.os.SystemClock
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import io.github.hannescoetzee.wazuhagent.DeviceInfo
@@ -37,6 +43,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 /**
  * Keeps the TCP session to the manager alive: handshake, keepalives, and draining the
  * event queue. Collectors run for as long as the service does.
+ *
+ * A partial wake lock and a Wi-Fi lock are held for the whole run, the same way Termux
+ * keeps a session alive with the screen off. Stop is what releases them.
  */
 class AgentForegroundService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -44,6 +53,8 @@ class AgentForegroundService : Service() {
     private var collectors: CollectorManager? = null
     private val reconnectNow = Channel<Unit>(Channel.CONFLATED)
     @Volatile private var connection: AgentConnection? = null
+    private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: WifiManager.WifiLock? = null
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -53,22 +64,29 @@ class AgentForegroundService : Service() {
         scope.launch {
             AgentState.status.collectLatest { status ->
                 getSystemService(NotificationManager::class.java)
-                    .notify(Notifications.ID_AGENT, Notifications.agent(this@AgentForegroundService, status))
+                    .notify(Notifications.ID_AGENT, notification(status))
             }
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // A startForegroundService that only reaches stopSelf still has to enter the foreground.
+        startInForeground()
         if (intent?.action == ACTION_STOP) {
+            wantsToStop = true
             app.store.agentEnabled = false
+            cancelRestart(this)
             stopSelf()
             return START_NOT_STICKY
         }
-        if (app.store.agentKey == null || app.store.config == null) {
-            AgentState.set(ConnectionState.STOPPED, "Not enrolled")
+        if (!app.store.agentEnabled || app.store.agentKey == null || app.store.config == null) {
+            AgentState.set(ConnectionState.STOPPED, if (app.store.agentKey == null) "Not enrolled" else "Stopped")
             stopSelf()
             return START_NOT_STICKY
         }
+        wantsToStop = false
+        acquireLocks()
+        startInForeground()
         if (loop?.isActive != true) {
             collectors = CollectorManager(this, app.queue, onNetworkAvailable = { reconnectNow.trySend(Unit) })
                 .also { it.start() }
@@ -77,16 +95,56 @@ class AgentForegroundService : Service() {
         return START_STICKY
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        if (!wantsToStop && app.store.agentEnabled && app.store.agentKey != null && app.store.config != null) {
+            AgentLog.info("Task removed, scheduling agent restart")
+            scheduleRestart(applicationContext)
+        }
+        super.onTaskRemoved(rootIntent)
+    }
+
     private fun startInForeground() {
         val type = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
         } else {
             0
         }
-        ServiceCompat.startForeground(
-            this, Notifications.ID_AGENT,
-            Notifications.agent(this, AgentState.status.value.copy(state = ConnectionState.CONNECTING)), type,
-        )
+        val current = AgentState.status.value
+        val shown = if (current.state == ConnectionState.STOPPED && !wantsToStop) {
+            current.copy(state = ConnectionState.CONNECTING)
+        } else {
+            current
+        }
+        ServiceCompat.startForeground(this, Notifications.ID_AGENT, notification(shown), type)
+    }
+
+    private fun notification(status: AgentStatus) =
+        Notifications.agent(this, status, wakeLockHeld = wakeLock?.isHeld == true)
+
+    /** Held until [onDestroy]. Doze still ignores these unless battery optimization is off. */
+    @SuppressLint("WakelockTimeout")
+    private fun acquireLocks() {
+        val power = wakeLock ?: getSystemService(PowerManager::class.java)
+            .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKELOCK_TAG)
+            .apply { setReferenceCounted(false) }
+            .also { wakeLock = it }
+        if (!power.isHeld) power.acquire()
+
+        val wifi = wifiLock ?: applicationContext.getSystemService(WifiManager::class.java)
+            .createWifiLock(wifiLockMode(), WIFILOCK_TAG)
+            .apply { setReferenceCounted(false) }
+            .also { wifiLock = it }
+        if (!wifi.isHeld) {
+            runCatching { wifi.acquire() }
+                .onFailure { AgentLog.warn("Could not acquire Wi-Fi lock: ${it.message}") }
+        }
+    }
+
+    private fun releaseLocks() {
+        wakeLock?.let { if (it.isHeld) it.release() }
+        wakeLock = null
+        wifiLock?.let { if (it.isHeld) it.release() }
+        wifiLock = null
     }
 
     private suspend fun runLoop() {
@@ -207,12 +265,17 @@ class AgentForegroundService : Service() {
             withTimeoutOrNull(3_000) { conn?.shutdown() }
         }
         scope.cancel()
+        releaseLocks()
         AgentState.set(ConnectionState.STOPPED)
         super.onDestroy()
     }
 
     companion object {
         private const val ACTION_STOP = "io.github.hannescoetzee.wazuhagent.STOP"
+        private const val WAKELOCK_TAG = "wazuhagent:service-wakelock"
+        private const val WIFILOCK_TAG = "wazuhagent:service-wifilock"
+        private const val RESTART_REQUEST_CODE = 2
+        private const val RESTART_DELAY_MS = 1_000L
         private const val INITIAL_BACKOFF_MS = 5_000L
         private const val MAX_BACKOFF_MS = 120_000L
         private const val ACK_GRACE_MS = 30_000L
@@ -222,6 +285,9 @@ class AgentForegroundService : Service() {
         /** Keeps bursts (e.g. the first package inventory) well under the manager's EPS limits. */
         private const val SEND_SPACING_MS = 10L
 
+        /** Set by Stop. onDestroy does not clear agentEnabled. */
+        @Volatile private var wantsToStop = false
+
         fun start(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, AgentForegroundService::class.java))
         }
@@ -229,8 +295,53 @@ class AgentForegroundService : Service() {
         fun stopIntent(context: Context) = Intent(context, AgentForegroundService::class.java).setAction(ACTION_STOP)
 
         fun stop(context: Context) {
+            wantsToStop = true
             context.app.store.agentEnabled = false
+            cancelRestart(context)
             context.stopService(Intent(context, AgentForegroundService::class.java))
         }
+
+        /**
+         * An exact alarm is one of the cases where Android 12+ still allows a background
+         * process to start a foreground service. An inexact alarm is not.
+         */
+        fun scheduleRestart(context: Context) {
+            if (!context.app.store.agentEnabled) return
+            val alarm = context.getSystemService(AlarmManager::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarm.canScheduleExactAlarms()) {
+                AgentLog.warn("Exact alarms are not allowed, so the agent cannot restart from the background")
+                return
+            }
+            val pending = restartPendingIntent(context, PendingIntent.FLAG_UPDATE_CURRENT) ?: return
+            if (!context.app.store.agentEnabled) return
+            runCatching {
+                alarm.setExactAndAllowWhileIdle(
+                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    SystemClock.elapsedRealtime() + RESTART_DELAY_MS,
+                    pending,
+                )
+            }.onFailure { AgentLog.warn("Could not schedule agent restart: ${it.message}") }
+            // Stop can land while the alarm is being armed.
+            if (!context.app.store.agentEnabled) cancelRestart(context)
+        }
+
+        private fun cancelRestart(context: Context) {
+            val pending = restartPendingIntent(context, PendingIntent.FLAG_NO_CREATE) ?: return
+            context.getSystemService(AlarmManager::class.java).cancel(pending)
+            pending.cancel()
+        }
+
+        private fun restartPendingIntent(context: Context, mutabilityExtra: Int): PendingIntent? {
+            val intent = Intent(context, AgentForegroundService::class.java)
+            return PendingIntent.getForegroundService(
+                context, RESTART_REQUEST_CODE, intent,
+                PendingIntent.FLAG_IMMUTABLE or mutabilityExtra,
+            )
+        }
+
+        @Suppress("DEPRECATION")
+        private fun wifiLockMode(): Int =
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) WifiManager.WIFI_MODE_FULL_LOW_LATENCY
+            else WifiManager.WIFI_MODE_FULL_HIGH_PERF
     }
 }

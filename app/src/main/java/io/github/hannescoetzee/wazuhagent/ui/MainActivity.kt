@@ -21,6 +21,12 @@ import io.github.hannescoetzee.wazuhagent.collectors.Capability
 import io.github.hannescoetzee.wazuhagent.ui.theme.WazuhTheme
 
 class MainActivity : ComponentActivity() {
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        maybeRequestBatteryExemption(intent)
+    }
+
     private val viewModel: MainViewModel by viewModels()
     private val capabilities = mutableStateOf(emptyList<Capability>())
 
@@ -31,6 +37,7 @@ class MainActivity : ComponentActivity() {
     private val permissions = PermissionActions(
         notifications = ::requestNotifications,
         battery = ::requestBatteryExemption,
+        exactAlarm = ::requestExactAlarm,
         location = {
             requestPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
         },
@@ -46,6 +53,7 @@ class MainActivity : ComponentActivity() {
                 AppScaffold(viewModel = viewModel, capabilities = caps, permissions = permissions)
             }
         }
+        maybeRequestBatteryExemption(intent)
     }
 
     override fun onResume() {
@@ -73,11 +81,28 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun maybeRequestBatteryExemption(intent: Intent?) {
+        if (intent?.getBooleanExtra(EXTRA_REQUEST_BATTERY, false) != true) return
+        intent.removeExtra(EXTRA_REQUEST_BATTERY)
+        requestBatteryExemption()
+    }
+
     // Sideloaded security agent: a persistent connection is the point of the app.
     @SuppressLint("BatteryLife")
     private fun requestBatteryExemption() {
         val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
         runCatching { startActivity(intent) }
-            .onFailure { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
+            .onFailure { runCatching { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) } }
+    }
+
+    private fun requestExactAlarm() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName"))
+        runCatching { startActivity(intent) }
+            .onFailure { runCatching { startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)) } }
+    }
+
+    companion object {
+        const val EXTRA_REQUEST_BATTERY = "io.github.hannescoetzee.wazuhagent.REQUEST_BATTERY"
     }
 }

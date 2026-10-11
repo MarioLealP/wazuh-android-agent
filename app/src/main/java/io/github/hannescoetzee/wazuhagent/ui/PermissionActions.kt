@@ -13,12 +13,14 @@ import io.github.hannescoetzee.wazuhagent.ui.theme.AppIcons
 class PermissionActions(
     val notifications: () -> Unit,
     val battery: () -> Unit,
+    val exactAlarm: () -> Unit,
     val location: () -> Unit,
     val deviceAdmin: () -> Unit,
 ) {
     fun forCapability(name: String): (() -> Unit)? = when (name) {
         Capabilities.NOTIFICATIONS -> notifications
         Capabilities.BATTERY_UNRESTRICTED -> battery
+        Capabilities.EXACT_ALARM -> exactAlarm
         Capabilities.LOCATION -> location
         Capabilities.DEVICE_ADMIN -> deviceAdmin
         else -> null
@@ -28,6 +30,7 @@ class PermissionActions(
         val GRANTABLE = listOf(
             Capabilities.NOTIFICATIONS,
             Capabilities.BATTERY_UNRESTRICTED,
+            Capabilities.EXACT_ALARM,
             Capabilities.LOCATION,
             Capabilities.DEVICE_ADMIN,
         )
@@ -35,6 +38,7 @@ class PermissionActions(
         fun icon(name: String): ImageVector = when (name) {
             Capabilities.NOTIFICATIONS -> Icons.Filled.Notifications
             Capabilities.BATTERY_UNRESTRICTED -> AppIcons.Battery
+            Capabilities.EXACT_ALARM -> AppIcons.Alarm
             Capabilities.LOCATION -> Icons.Filled.LocationOn
             Capabilities.DEVICE_ADMIN -> Icons.Filled.Lock
             Capabilities.NETWORK_LOGGING -> AppIcons.Dns

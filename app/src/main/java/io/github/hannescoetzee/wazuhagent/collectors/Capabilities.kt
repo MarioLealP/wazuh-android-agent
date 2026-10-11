@@ -1,6 +1,7 @@
 package io.github.hannescoetzee.wazuhagent.collectors
 
 import android.Manifest
+import android.app.AlarmManager
 import android.app.admin.DevicePolicyManager
 import android.content.Context
 import android.content.pm.PackageManager
@@ -21,6 +22,7 @@ object Capabilities {
     const val NETWORK_LOGGING = "network_logging"
     const val LOCATION = "location"
     const val BATTERY_UNRESTRICTED = "battery_unrestricted"
+    const val EXACT_ALARM = "exact_alarm"
     const val NOTIFICATIONS = "notifications"
 
     fun check(context: Context): List<Capability> {
@@ -57,6 +59,12 @@ object Capabilities {
                 BATTERY_UNRESTRICTED, "Run unrestricted in background",
                 context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName),
                 "Android may stop the agent in the background",
+            ),
+            Capability(
+                EXACT_ALARM, "Alarms and reminders",
+                Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                    context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms(),
+                "The agent cannot restart itself after it is closed",
             ),
             Capability(
                 NOTIFICATIONS, "Status notification",

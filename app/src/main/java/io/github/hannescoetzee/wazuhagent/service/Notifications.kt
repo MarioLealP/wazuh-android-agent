@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import io.github.hannescoetzee.wazuhagent.R
 import io.github.hannescoetzee.wazuhagent.ui.MainActivity
@@ -21,7 +22,7 @@ object Notifications {
         context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
     }
 
-    fun agent(context: Context, status: AgentStatus): android.app.Notification {
+    fun agent(context: Context, status: AgentStatus, wakeLockHeld: Boolean = false): android.app.Notification {
         val open = PendingIntent.getActivity(
             context, 0, Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
@@ -36,15 +37,34 @@ object Notifications {
             ConnectionState.WAITING_RETRY -> "Offline, retrying"
             ConnectionState.STOPPED -> "Stopped"
         }
-        return NotificationCompat.Builder(context, CHANNEL_AGENT)
+        val detail = if (status.detail.isEmpty()) text else "$text · ${status.detail}"
+        val content = if (wakeLockHeld) "$detail · wake lock held" else detail
+        val builder = NotificationCompat.Builder(context, CHANNEL_AGENT)
             .setSmallIcon(R.drawable.ic_stat_agent)
             .setContentTitle("Wazuh agent")
-            .setContentText(if (status.detail.isEmpty()) text else "$text · ${status.detail}")
+            .setContentText(content)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setContentIntent(open)
-            .addAction(0, "Stop", stop)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-            .build()
+        if (!ignoringBatteryOptimizations(context)) {
+            builder.addAction(0, "Unrestrict", unrestrictPendingIntent(context))
+        }
+        builder.addAction(0, "Stop", stop)
+        return builder.build()
+    }
+
+    private fun ignoringBatteryOptimizations(context: Context): Boolean =
+        context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName)
+
+    /** Opens the app, which asks for the exemption. Settings is not launched from the service. */
+    private fun unrestrictPendingIntent(context: Context): PendingIntent {
+        val open = Intent(context, MainActivity::class.java)
+            .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            .putExtra(MainActivity.EXTRA_REQUEST_BATTERY, true)
+        return PendingIntent.getActivity(
+            context, 3, open,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
     }
 }
