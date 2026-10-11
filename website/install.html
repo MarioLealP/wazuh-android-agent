@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Install · Wazuh Agent</title>
+  <meta name="description" content="Build the Wazuh Android agent with JDK 17 and Android SDK 35, sideload the debug APK, and enroll with a manager.">
+  <link rel="icon" href="img/mark.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/site.css">
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem("theme");
+        if (stored === "light" || stored === "dark") {
+          document.documentElement.setAttribute("data-theme", stored);
+        }
+      } catch (error) {}
+    })();
+  </script>
+</head>
+<body>
+  <a class="skip" href="#content">Skip to content</a>
+  <header class="site-header">
+    <div class="wrap bar">
+      <a class="brand" href="index.html">
+        <img src="img/mark.svg" width="28" height="28" alt="">
+        <span>Wazuh Agent</span>
+      </a>
+      <nav id="site-nav" class="site-nav" data-nav aria-label="Sections">
+        <a href="index.html">Overview</a>
+        <a href="install.html" aria-current="page">Install</a>
+        <a href="device-owner.html">Device Owner</a>
+        <a href="manager.html">Manager</a>
+      </nav>
+      <div class="bar-actions">
+        <button type="button" class="text-btn" data-theme-toggle>Dark</button>
+        <button type="button" class="text-btn nav-toggle" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button>
+      </div>
+    </div>
+    <p class="visually-hidden" data-copy-status aria-live="polite"></p>
+  </header>
+  <main id="content">
+    <div class="wrap">
+      <header class="page-head">
+        <p class="spec-no">Install</p>
+        <h1>Build the app and enroll the phone.</h1>
+        <p class="lede">JDK 17 and the Android SDK, platform 35. The debug APK is enough to sideload.</p>
+      </header>
+
+      <section class="spec">
+        <p class="spec-no">01</p>
+        <div>
+          <h2>Requirements</h2>
+          <p>These commands assume Homebrew on macOS. Point <code>JAVA_HOME</code> and <code>ANDROID_HOME</code> at the same places if you install the JDK and SDK another way.</p>
+          <div class="cmd">
+            <pre><code>brew install openjdk@17
+brew install --cask android-commandlinetools
+export JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home
+export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
+sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+echo "sdk.dir=$ANDROID_HOME" &gt; local.properties</code></pre>
+            <button type="button" class="text-btn" data-copy>Copy</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="spec">
+        <p class="spec-no">02</p>
+        <div>
+          <h2>Build</h2>
+          <p>Protocol tests use vectors built independently from the Wazuh C sources. The debug APK lands in <code>app/build/outputs/apk/debug/</code>.</p>
+          <div class="cmd">
+            <pre><code>./gradlew :protocol:test
+./gradlew :app:assembleDebug</code></pre>
+            <button type="button" class="text-btn" data-copy>Copy</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="spec">
+        <p class="spec-no">03</p>
+        <div>
+          <h2>Put it on the phone</h2>
+          <ol class="steps">
+            <li>
+              <h3>Turn on USB debugging</h3>
+              <p>On the phone, enable Developer options, then USB debugging, and connect it by USB.</p>
+            </li>
+            <li>
+              <h3>Install the APK</h3>
+              <div class="cmd">
+                <pre><code>$ANDROID_HOME/platform-tools/adb install -r app/build/outputs/apk/debug/wazuh-agent-*-debug.apk</code></pre>
+                <button type="button" class="text-btn" data-copy>Copy</button>
+              </div>
+            </li>
+            <li>
+              <h3>Enroll</h3>
+              <p>Open Wazuh Agent. It opens on the Settings tab until the phone is enrolled. Enter the manager address, add the enrollment password if the manager uses one, then tap Enroll.</p>
+              <p>Enrollment fails with <code>Invalid group</code> if a group you enter does not exist. Create the group on the manager first.</p>
+            </li>
+            <li>
+              <h3>Let it keep running</h3>
+              <p>Allow the notification, and allow the app to run unrestricted in the background so Android does not kill the connection. While the agent is running it holds a wake lock so the session stays up with the screen off. Run unrestricted in background is still required on phones that kill foreground services anyway.</p>
+              <p>On Android 12, also allow Alarms and reminders if the Status tab asks, so the agent can restart itself. The Status tab lists anything still missing under Needs attention.</p>
+            </li>
+            <li>
+              <h3>Failed unlocks, if you want them</h3>
+              <p>Tap Allow next to Device admin. The admin only uses the watch-login policy: it cannot lock, wipe, or change the phone. If it is turned off later, the manager gets an alert (rule 100265).</p>
+              <p>Once enrolled, you can turn USB debugging off again. The agent reports it as a posture finding while it is on.</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="spec">
+        <p class="spec-no">04</p>
+        <div>
+          <h2>Certificate and versions</h2>
+          <p>The app pins the manager’s enrollment certificate the first time it enrolls. Later enrollments to the same host must present the same certificate.</p>
+          <ol class="rows">
+            <li>
+              <h3>App version</h3>
+              <p><code>0.3.0</code> (version code 3), from <code>versionName</code> and <code>versionCode</code>. It is shown in the app, sent in every event as <code>android.app_version</code>, and sent as the agent label <code>agent.app_version</code>. Bump it for each build you install.</p>
+            </li>
+            <li>
+              <h3>Protocol version</h3>
+              <p>Negotiated at enrollment. The app picks the newest version the manager accepts, because Wazuh rejects agents that are newer than the manager.</p>
+            </li>
+          </ol>
+          <p>To enroll a throwaway agent against a real manager, set the address and password and run the live test. The host below is an example.</p>
+          <div class="cmd">
+            <pre><code>WAZUH_MANAGER=192.168.1.10 WAZUH_PASSWORD=secret ./gradlew :protocol:test --tests '*LiveManagerTest*'</code></pre>
+            <button type="button" class="text-btn" data-copy>Copy</button>
+          </div>
+          <p class="next">
+            <span>Next</span>
+            <a href="device-owner.html">Device Owner mode</a>
+          </p>
+        </div>
+      </section>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <div class="wrap foot">
+      <p>Android agent · version 0.3.0</p>
+      <a href="https://github.com/skuilplek/wazuh-android-agent">github.com/skuilplek/wazuh-android-agent</a>
+    </div>
+  </footer>
+  <script src="js/site.js"></script>
+</body>
+</html>

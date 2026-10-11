@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="240" viewBox="0 0 920 240" role="img" aria-labelledby="enrollTitle">
+  <title id="enrollTitle">Enrollment path</title>
+  <rect width="920" height="240" fill="#0B1F3A"/>
+  <line x1="248" y1="120" x2="348" y2="120" stroke="#3595F2" stroke-width="1.5"/>
+  <line x1="572" y1="120" x2="672" y2="120" stroke="#3595F2" stroke-width="1.5"/>
+  <text x="298" y="104" fill="#5AABF5" font-family="ui-monospace, monospace" font-size="13" text-anchor="middle" letter-spacing="1.2">TLS &#183; 1515</text>
+  <text x="622" y="104" fill="#5AABF5" font-family="ui-monospace, monospace" font-size="13" text-anchor="middle" letter-spacing="1.2">AES &#183; 1514</text>
+  <g>
+    <rect x="36" y="64" width="212" height="112" fill="#102744" stroke="#22395A"/>
+    <rect x="36" y="64" width="212" height="3" fill="#3595F2"/>
+    <text x="52" y="96" fill="#9DB0C8" font-family="ui-monospace, monospace" font-size="12" letter-spacing="1.4">PHONE</text>
+    <text x="52" y="124" fill="#E3EAF4" font-family="Segoe UI, Helvetica, sans-serif" font-size="20">The agent</text>
+    <text x="52" y="150" fill="#9DB0C8" font-family="Segoe UI, Helvetica, sans-serif" font-size="14">Kotlin, not rooted</text>
+  </g>
+  <g>
+    <rect x="360" y="64" width="212" height="112" fill="#102744" stroke="#22395A"/>
+    <rect x="360" y="64" width="212" height="3" fill="#3595F2"/>
+    <text x="376" y="96" fill="#9DB0C8" font-family="ui-monospace, monospace" font-size="12" letter-spacing="1.4">ENROLL</text>
+    <text x="376" y="124" fill="#E3EAF4" font-family="Segoe UI, Helvetica, sans-serif" font-size="20">wazuh-authd</text>
+    <text x="376" y="150" fill="#9DB0C8" font-family="Segoe UI, Helvetica, sans-serif" font-size="14">Certificate pinned</text>
+  </g>
+  <g>
+    <rect x="684" y="64" width="200" height="112" fill="#102744" stroke="#22395A"/>
+    <rect x="684" y="64" width="200" height="3" fill="#3595F2"/>
+    <text x="700" y="96" fill="#9DB0C8" font-family="ui-monospace, monospace" font-size="12" letter-spacing="1.4">SESSION</text>
+    <text x="700" y="124" fill="#E3EAF4" font-family="Segoe UI, Helvetica, sans-serif" font-size="20">wazuh-remoted</text>
+    <text x="700" y="150" fill="#9DB0C8" font-family="Segoe UI, Helvetica, sans-serif" font-size="14">Active agent</text>
+  </g>
+</svg>

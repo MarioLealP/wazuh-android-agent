@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Manager · Wazuh Agent</title>
+  <meta name="description" content="Wazuh manager setup for the Android agent: the android group, android_rules.xml, optional app and domain lists, and the rule reference.">
+  <link rel="icon" href="img/mark.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/site.css">
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem("theme");
+        if (stored === "light" || stored === "dark") {
+          document.documentElement.setAttribute("data-theme", stored);
+        }
+      } catch (error) {}
+    })();
+  </script>
+</head>
+<body>
+  <a class="skip" href="#content">Skip to content</a>
+  <header class="site-header">
+    <div class="wrap bar">
+      <a class="brand" href="index.html">
+        <img src="img/mark.svg" width="28" height="28" alt="">
+        <span>Wazuh Agent</span>
+      </a>
+      <nav id="site-nav" class="site-nav" data-nav aria-label="Sections">
+        <a href="index.html">Overview</a>
+        <a href="install.html">Install</a>
+        <a href="device-owner.html">Device Owner</a>
+        <a href="manager.html" aria-current="page">Manager</a>
+      </nav>
+      <div class="bar-actions">
+        <button type="button" class="text-btn" data-theme-toggle>Dark</button>
+        <button type="button" class="text-btn nav-toggle" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button>
+      </div>
+    </div>
+    <p class="visually-hidden" data-copy-status aria-live="polite"></p>
+  </header>
+  <main id="content">
+    <div class="wrap">
+      <header class="page-head">
+        <p class="spec-no">Manager</p>
+        <h1>The phone enrolls like any other agent.</h1>
+        <p class="lede">The manager needs the rules file, and optionally an <code>android</code> group, an enrollment password, and the app and domain lists.</p>
+      </header>
+
+      <section class="spec">
+        <p class="spec-no">01</p>
+        <div>
+          <h2>Create the group</h2>
+          <p>The app enrolls without a group unless you fill in the Groups field. Enrollment fails with <code>Invalid group</code> if a group you enter does not exist, so create it first.</p>
+          <div class="cmd">
+            <pre><code>/var/ossec/bin/agent_groups -a -g android -q</code></pre>
+            <button type="button" class="text-btn" data-copy>Copy</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="spec">
+        <p class="spec-no">02</p>
+        <div>
+          <h2>Install the rules</h2>
+          <p>No decoder file is needed. Events are plain JSON with an <code>android</code> root object, which the stock JSON decoder parses into fields such as <code>android.type</code>, <code>android.check</code>, and <code>android.package</code>. A custom JSON decoder would never be selected, because the stock one matches every log that starts with <code>{&quot;</code>.</p>
+          <div class="cmd">
+            <pre><code>cp rules/android_rules.xml /var/ossec/etc/rules/android_rules.xml
+chown wazuh:wazuh /var/ossec/etc/rules/android_rules.xml
+chmod 660 /var/ossec/etc/rules/android_rules.xml
+/var/ossec/bin/wazuh-control restart</code></pre>
+            <button type="button" class="text-btn" data-copy>Copy</button>
+          </div>
+          <p>On older installs the owner is <code>ossec:ossec</code>. With the Docker deployment, copy the file into the <code>wazuh.manager</code> container, or the <code>wazuh_etc</code> volume, and restart the container.</p>
+        </div>
+      </section>
+
+      <section class="spec">
+        <p class="spec-no">03</p>
+        <div>
+          <h2>Enrollment password</h2>
+          <p>If <code>&lt;auth&gt;&lt;use_password&gt;yes&lt;/use_password&gt;&lt;/auth&gt;</code> is set in <code>ossec.conf</code>, enter the contents of <code>/var/ossec/etc/authd.pass</code> in the app’s password field.</p>
+        </div>
+      </section>
+
+      <section class="spec">
+        <p class="spec-no">04</p>
+        <div>
+          <h2 id="lists-heading">App and domain lists</h2>
+          <p><code>rules/android_rules_lists.xml</code> checks events against three CDB lists that you keep on the manager. Each line is <code>key:value</code>, where the key is a package name or a hostname and the value is an optional note. Hostnames must match exactly. Subdomains are not included.</p>
+          <div class="table-wrap">
+            <table aria-labelledby="lists-heading">
+              <thead>
+                <tr>
+                  <th scope="col">List</th>
+                  <th scope="col">Rule</th>
+                  <th scope="col">Alert</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="loud">
+                  <td class="num">android_blocked_apps</td>
+                  <td class="num">100290, 100292</td>
+                  <td>A listed app is installed, updated, or present (level 12)</td>
+                </tr>
+                <tr class="warn">
+                  <td class="num">android_approved_apps</td>
+                  <td class="num">100238, 100239</td>
+                  <td>A user app that is not listed is installed (level 8) or present (level 5)</td>
+                </tr>
+                <tr class="loud">
+                  <td class="num">android_suspicious_domains</td>
+                  <td class="num">100291</td>
+                  <td>An app looks up a listed hostname (Device Owner only, level 10)</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="cmd">
+            <pre><code>cp lists/android_* /var/ossec/etc/lists/
+chown wazuh:wazuh /var/ossec/etc/lists/android_*</code></pre>
+            <button type="button" class="text-btn" data-copy>Copy</button>
+          </div>
+          <p>Declare the lists in the <code>&lt;ruleset&gt;</code> section of <code>/var/ossec/etc/ossec.conf</code>:</p>
+          <div class="cmd">
+            <pre><code>&lt;list&gt;etc/lists/android_approved_apps&lt;/list&gt;
+&lt;list&gt;etc/lists/android_blocked_apps&lt;/list&gt;
+&lt;list&gt;etc/lists/android_suspicious_domains&lt;/list&gt;</code></pre>
+            <button type="button" class="text-btn" data-copy>Copy</button>
+          </div>
+          <p>Then install the lists rules file and restart. It must load after <code>android_rules.xml</code>, which its file name ensures. The manager loads rule files in alphabetical order.</p>
+          <div class="cmd">
+            <pre><code>cp rules/android_rules_lists.xml /var/ossec/etc/rules/
+chown wazuh:wazuh /var/ossec/etc/rules/android_rules_lists.xml
+/var/ossec/bin/wazuh-control restart</code></pre>
+            <button type="button" class="text-btn" data-copy>Copy</button>
+          </div>
+          <p>The approved list is only useful once it contains the apps already on your phones. Otherwise every user app raises rule 100239 on the first inventory. Build it from inventory the phones have already sent:</p>
+          <div class="cmd">
+            <pre><code>jq -r 'select(.data.android.type == "package_inventory" and (.data.android.system_app | tostring) == "false")
+       | .data.android.package + ":"' /var/ossec/logs/alerts/alerts.json | sort -u</code></pre>
+            <button type="button" class="text-btn" data-copy>Copy</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="spec">
+        <p class="spec-no">05</p>
+        <div>
+          <h2>Offline phones</h2>
+          <p>No extra component is needed. The phone keeps a regular agent session, so the manager marks it disconnected once keepalives stop, after <code>&lt;agents_disconnection_time&gt;</code> in the <code>&lt;global&gt;</code> section, 10 minutes by default, and raises Wazuh rule 504, “Wazuh agent disconnected”. That rule is level 3. Override it in <code>local_rules.xml</code> if you want a louder alert.</p>
+        </div>
+      </section>
+
+      <section class="spec" id="rules">
+        <p class="spec-no">06</p>
+        <div>
+          <h2 id="rule-heading">Rule reference</h2>
+          <p>Level 10 and above is marked in red. Level 7 to 9 is marked in amber. If DNS and connection alerts are too many, lower 100256 and 100257 to level 0. Rule 100291 still works, because it only needs the rules to match, not to raise an alert.</p>
+          <div class="table-wrap">
+            <table aria-labelledby="rule-heading">
+              <thead>
+                <tr>
+                  <th scope="col">ID</th>
+                  <th scope="col">Level</th>
+                  <th scope="col">Fires on</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr><td class="num">100210</td><td class="num">3</td><td>Posture report (every change, at least every 6 hours)</td></tr>
+                <tr class="loud"><td class="num">100212</td><td class="num">10</td><td>No screen lock</td></tr>
+                <tr class="loud"><td class="num">100213</td><td class="num">10</td><td>Storage encryption inactive or unsupported</td></tr>
+                <tr class="loud"><td class="num">100214</td><td class="num">12</td><td>Root indicators found</td></tr>
+                <tr class="loud"><td class="num">100215</td><td class="num">10</td><td>Wireless debugging enabled</td></tr>
+                <tr class="warn"><td class="num">100216</td><td class="num">8</td><td>USB debugging enabled</td></tr>
+                <tr><td class="num">100217</td><td class="num">5</td><td>Developer options enabled</td></tr>
+                <tr class="warn"><td class="num">100218</td><td class="num">7</td><td>Security patch older than 90 days</td></tr>
+                <tr class="loud"><td class="num">100219</td><td class="num">10</td><td>Verified boot state orange, yellow, or red</td></tr>
+                <tr><td class="num">100220</td><td class="num">5</td><td>Running on an emulator</td></tr>
+                <tr class="warn"><td class="num">100222</td><td class="num">9</td><td>Accessibility services changed</td></tr>
+                <tr class="warn"><td class="num">100223</td><td class="num">9</td><td>Device admin apps changed</td></tr>
+                <tr class="warn"><td class="num">100224</td><td class="num">7</td><td>Apps able to install other apps changed</td></tr>
+                <tr><td class="num">100230</td><td class="num">3</td><td>App installed, updated, or removed</td></tr>
+                <tr class="warn"><td class="num">100231</td><td class="num">8</td><td>App installed or updated from outside an app store</td></tr>
+                <tr class="warn"><td class="num">100232</td><td class="num">9</td><td>App installed over ADB</td></tr>
+                <tr><td class="num">100233</td><td class="num">5</td><td>Non-store app removed</td></tr>
+                <tr class="warn"><td class="num">100234</td><td class="num">7</td><td>Debuggable app installed</td></tr>
+                <tr><td class="num">100235</td><td class="num">3</td><td>App inventory entry (first run after enrollment)</td></tr>
+                <tr><td class="num">100236</td><td class="num">6</td><td>Inventory entry not installed from an app store</td></tr>
+                <tr><td class="num">100237</td><td class="num">3</td><td>Daily app summary</td></tr>
+                <tr class="warn"><td class="num">100238</td><td class="num">8</td><td>App installed that is not on the approved list (lists file)</td></tr>
+                <tr><td class="num">100239</td><td class="num">5</td><td>Inventory entry not on the approved list (lists file)</td></tr>
+                <tr><td class="num">100240</td><td class="num">3</td><td>Security log entry (Device Owner)</td></tr>
+                <tr class="loud"><td class="num">100241</td><td class="num">10</td><td>ADB shell command</td></tr>
+                <tr class="loud"><td class="num">100242</td><td class="num">10</td><td>Interactive ADB shell</td></tr>
+                <tr class="loud"><td class="num">100243</td><td class="num">10</td><td>File pulled or pushed over ADB</td></tr>
+                <tr class="loud"><td class="num">100244</td><td class="num">10</td><td>CA certificate installed</td></tr>
+                <tr><td class="num">100245</td><td class="num">5</td><td>CA certificate removed</td></tr>
+                <tr class="loud"><td class="num">100246</td><td class="num">12</td><td>Security logging stopped</td></tr>
+                <tr class="loud"><td class="num">100247</td><td class="num">10</td><td>Key integrity violation, wipe failure, or full log buffer</td></tr>
+                <tr class="loud"><td class="num">100248</td><td class="num">10</td><td>Cryptographic self-test failed</td></tr>
+                <tr><td class="num">100249</td><td class="num">5</td><td>External storage mounted</td></tr>
+                <tr><td class="num">100250</td><td class="num">3</td><td>Network change</td></tr>
+                <tr><td class="num">100254</td><td class="num">3</td><td>Network change, including the Wi-Fi name</td></tr>
+                <tr class="warn"><td class="num">100251</td><td class="num">8</td><td>Open or WEP Wi-Fi</td></tr>
+                <tr><td class="num">100252</td><td class="num">4</td><td>VPN active</td></tr>
+                <tr><td class="num">100253</td><td class="num">5</td><td>Captive portal</td></tr>
+                <tr><td class="num">100256</td><td class="num">3</td><td>DNS lookup by an app (Device Owner, one per app and hostname per batch)</td></tr>
+                <tr><td class="num">100257</td><td class="num">3</td><td>Connection by an app (Device Owner, one per app and destination per batch)</td></tr>
+                <tr><td class="num">100260</td><td class="num">5</td><td>Failed unlock attempt (agent device admin)</td></tr>
+                <tr class="loud"><td class="num">100261</td><td class="num">10</td><td>5 failed unlocks within 5 minutes</td></tr>
+                <tr class="loud"><td class="num">100262</td><td class="num">10</td><td>10 or more failed unlocks in a row</td></tr>
+                <tr><td class="num">100263</td><td class="num">3</td><td>Unlocked after failed attempts</td></tr>
+                <tr><td class="num">100264</td><td class="num">3</td><td>Agent device admin turned on</td></tr>
+                <tr class="loud"><td class="num">100265</td><td class="num">10</td><td>Agent device admin turned off</td></tr>
+                <tr class="warn"><td class="num">100270–100272</td><td class="num">3–7</td><td>Agent log, warnings and errors, crashes</td></tr>
+                <tr class="loud"><td class="num">100290</td><td class="num">12</td><td>Blocked app installed or updated (lists file)</td></tr>
+                <tr class="loud"><td class="num">100291</td><td class="num">10</td><td>DNS lookup of a suspicious domain (lists file)</td></tr>
+                <tr class="loud"><td class="num">100292</td><td class="num">12</td><td>Blocked app present in inventory (lists file)</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="spec">
+        <p class="spec-no">07</p>
+        <div>
+          <h2 id="queries-heading">Dashboard queries</h2>
+          <p>In Discover on <code>wazuh-alerts-*</code>.</p>
+          <div class="table-wrap">
+            <table aria-labelledby="queries-heading">
+              <thead>
+                <tr>
+                  <th scope="col">Question</th>
+                  <th scope="col">Query</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Everything from the Android agent</td>
+                  <td><code>rule.groups: android</code></td>
+                </tr>
+                <tr>
+                  <td>Stalkerware signals (accessibility, device admin changes)</td>
+                  <td><code>rule.groups: android_stalkerware</code></td>
+                </tr>
+                <tr>
+                  <td>Possible lost or stolen phones</td>
+                  <td><code>rule.id: (100261 or 100262)</code></td>
+                </tr>
+                <tr>
+                  <td>Agent device admin turned off</td>
+                  <td><code>rule.groups: android_tamper</code></td>
+                </tr>
+                <tr>
+                  <td>Unapproved or blocked apps</td>
+                  <td><code>rule.groups: (android_unapproved_app or android_blocked_app)</code></td>
+                </tr>
+                <tr>
+                  <td>Sideloaded apps</td>
+                  <td><code>rule.groups: android_sideload</code></td>
+                </tr>
+                <tr>
+                  <td>Phones without the agent’s device admin</td>
+                  <td><code>data.android.type: posture and data.android.capabilities.device_admin.available: false</code></td>
+                </tr>
+                <tr>
+                  <td>CA certificates installed</td>
+                  <td><code>rule.id: 100244</code></td>
+                </tr>
+                <tr>
+                  <td>DNS lookups by one app</td>
+                  <td><code>rule.id: 100256 and data.android.package: "com.example.app"</code></td>
+                </tr>
+                <tr>
+                  <td>Disconnected phones</td>
+                  <td><code>rule.id: 504</code></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p>For a per-phone overview, build a data table visualization with a terms split on <code>agent.name</code> and a filter of <code>rule.groups: android and rule.level &gt;= 7</code>. For patch levels, use a terms split on <code>agent.name</code> and <code>data.android.security_patch</code> with the filter <code>rule.id: 100210</code>.</p>
+        </div>
+      </section>
+
+      <section class="spec">
+        <p class="spec-no">08</p>
+        <div>
+          <h2>Remove the phone</h2>
+          <p>Remove the agent on the manager, then tap Forget enrollment in the app. Re-enrolling under the same name while the old agent still exists can be refused, depending on the manager’s <code>&lt;force&gt;</code> settings.</p>
+          <div class="cmd">
+            <pre><code>/var/ossec/bin/manage_agents -r &lt;id&gt;</code></pre>
+            <button type="button" class="text-btn" data-copy>Copy</button>
+          </div>
+          <p class="next">
+            <span>Next</span>
+            <a href="index.html">Back to the overview</a>
+          </p>
+        </div>
+      </section>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <div class="wrap foot">
+      <p>Android agent · version 0.3.0</p>
+      <a href="https://github.com/skuilplek/wazuh-android-agent">github.com/skuilplek/wazuh-android-agent</a>
+    </div>
+  </footer>
+  <script src="js/site.js"></script>
+</body>
+</html>

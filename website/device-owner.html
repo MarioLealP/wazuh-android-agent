@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Device Owner · Wazuh Agent</title>
+  <meta name="description" content="Optional Device Owner mode for the Wazuh Android agent: security log, network log, and QR provisioning on a factory-reset phone.">
+  <link rel="icon" href="img/mark.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/site.css">
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem("theme");
+        if (stored === "light" || stored === "dark") {
+          document.documentElement.setAttribute("data-theme", stored);
+        }
+      } catch (error) {}
+    })();
+  </script>
+</head>
+<body>
+  <a class="skip" href="#content">Skip to content</a>
+  <header class="site-header">
+    <div class="wrap bar">
+      <a class="brand" href="index.html">
+        <img src="img/mark.svg" width="28" height="28" alt="">
+        <span>Wazuh Agent</span>
+      </a>
+      <nav id="site-nav" class="site-nav" data-nav aria-label="Sections">
+        <a href="index.html">Overview</a>
+        <a href="install.html">Install</a>
+        <a href="device-owner.html" aria-current="page">Device Owner</a>
+        <a href="manager.html">Manager</a>
+      </nav>
+      <div class="bar-actions">
+        <button type="button" class="text-btn" data-theme-toggle>Dark</button>
+        <button type="button" class="text-btn nav-toggle" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button>
+      </div>
+    </div>
+    <p class="visually-hidden" data-copy-status aria-live="polite"></p>
+  </header>
+  <main id="content">
+    <div class="wrap">
+      <header class="page-head">
+        <p class="spec-no">Device Owner</p>
+        <h1>Optional, on a phone dedicated to the agent.</h1>
+        <p class="lede">The agent then turns on Android’s security log and network log. It sets no other policy. This needs a factory-reset phone with no Google or other accounts added.</p>
+      </header>
+
+      <section class="spec">
+        <p class="spec-no">01</p>
+        <div>
+          <h2>Set the owner with adb</h2>
+          <p>Install the app on the freshly reset phone, then:</p>
+          <div class="cmd">
+            <pre><code>adb shell dpm set-device-owner io.github.hannescoetzee.wazuhagent/.admin.AgentDeviceAdminReceiver</code></pre>
+            <button type="button" class="text-btn" data-copy>Copy</button>
+          </div>
+          <p>Open the app and enroll as usual. The Capabilities card shows whether the security and network logs are on.</p>
+        </div>
+      </section>
+
+      <section class="spec">
+        <p class="spec-no">02</p>
+        <div>
+          <h2>What those logs contain</h2>
+          <ol class="rows">
+            <li>
+              <h3>Security log</h3>
+              <p>ADB shell commands, interactive shells, files pulled or pushed over ADB, CA certificate installs and removals, logging stopped, key integrity violations, wipe failures, a full log buffer, cryptographic self-test failures, and external storage mounts.</p>
+            </li>
+            <li>
+              <h3>Network log</h3>
+              <p>DNS lookups and connections, grouped per app and destination in each batch.</p>
+            </li>
+          </ol>
+          <p>Android delivers both logs in batches, often an hour or more apart, so these events arrive late.</p>
+        </div>
+      </section>
+
+      <section class="spec">
+        <p class="spec-no">03</p>
+        <div>
+          <h2>QR provisioning</h2>
+          <p>A factory-reset phone can be set up from a QR code instead of adb. The phone downloads the app, makes it Device Owner, and enrolls with the manager without anyone typing the settings.</p>
+          <ol class="steps">
+            <li>
+              <h3>Host a release APK</h3>
+              <p>Build a release APK and host it at an HTTPS URL the phone can reach.</p>
+            </li>
+            <li>
+              <h3>Fill the payload</h3>
+              <p>Copy <code>provisioning/qr_payload.example.json</code>. Set <code>PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION</code> to the APK URL.</p>
+              <p>Set <code>PROVISIONING_DEVICE_ADMIN_SIGNATURE_CHECKSUM</code> to the SHA-256 of the signing certificate, base64url-encoded:</p>
+              <div class="cmd">
+                <pre><code>apksigner verify --print-certs app-release.apk | grep 'SHA-256' | head -1 | awk '{print $NF}' \
+  | xxd -r -p | base64 | tr '+/' '-_' | tr -d '='</code></pre>
+                <button type="button" class="text-btn" data-copy>Copy</button>
+              </div>
+              <p>Admin extras: <code>manager_host</code>, <code>enroll_port</code>, <code>agent_port</code>, <code>enrollment_password</code>, <code>groups</code>, and optionally <code>agent_name</code> and <code>keepalive_seconds</code>.</p>
+              <p><code>manager_cert_sha256</code> is the SHA-256 of the manager’s authd certificate, so the first enrollment is pinned instead of trusting whatever certificate it sees. Remove the key to trust the first certificate instead.</p>
+              <div class="cmd">
+                <pre><code>openssl x509 -in /var/ossec/etc/sslmanager.cert -noout -fingerprint -sha256</code></pre>
+                <button type="button" class="text-btn" data-copy>Copy</button>
+              </div>
+            </li>
+            <li>
+              <h3>Make the code</h3>
+              <div class="cmd">
+                <pre><code>qrencode -o payload.png &lt; payload.json</code></pre>
+                <button type="button" class="text-btn" data-copy>Copy</button>
+              </div>
+            </li>
+            <li>
+              <h3>Scan it</h3>
+              <p>On the phone’s welcome screen, tap six times to open the QR reader and scan the code.</p>
+            </li>
+          </ol>
+          <p>If enrollment fails during setup, for example because the manager is not reachable yet, the settings are kept and you can tap Enroll in the app later.</p>
+        </div>
+      </section>
+
+      <section class="spec">
+        <p class="spec-no">04</p>
+        <div>
+          <h2>Remove it</h2>
+          <p>To remove Device Owner, factory-reset the phone.</p>
+          <p class="next">
+            <span>Next</span>
+            <a href="manager.html">Manager rules</a>
+          </p>
+        </div>
+      </section>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <div class="wrap foot">
+      <p>Android agent · version 0.3.0</p>
+      <a href="https://github.com/skuilplek/wazuh-android-agent">github.com/skuilplek/wazuh-android-agent</a>
+    </div>
+  </footer>
+  <script src="js/site.js"></script>
+</body>
+</html>

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wazuh Agent for Android</title>
+  <meta name="description" content="A native Kotlin Wazuh agent for non-rooted Android phones. It enrolls over TLS and then speaks the regular agent protocol.">
+  <link rel="icon" href="img/mark.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/site.css">
+  <script>
+    (function () {
+      try {
+        var stored = localStorage.getItem("theme");
+        if (stored === "light" || stored === "dark") {
+          document.documentElement.setAttribute("data-theme", stored);
+        }
+      } catch (error) {}
+    })();
+  </script>
+</head>
+<body>
+  <a class="skip" href="#content">Skip to content</a>
+  <header class="site-header">
+    <div class="wrap bar">
+      <a class="brand" href="index.html">
+        <img src="img/mark.svg" width="28" height="28" alt="">
+        <span>Wazuh Agent</span>
+      </a>
+      <nav id="site-nav" class="site-nav" data-nav aria-label="Sections">
+        <a href="index.html" aria-current="page">Overview</a>
+        <a href="install.html">Install</a>
+        <a href="device-owner.html">Device Owner</a>
+        <a href="manager.html">Manager</a>
+      </nav>
+      <div class="bar-actions">
+        <button type="button" class="text-btn" data-theme-toggle>Dark</button>
+        <button type="button" class="text-btn nav-toggle" data-nav-toggle aria-expanded="false" aria-controls="site-nav">Menu</button>
+      </div>
+    </div>
+    <p class="visually-hidden" data-copy-status aria-live="polite"></p>
+  </header>
+  <main id="content">
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div>
+          <p class="kicker">Android agent · 0.3.0</p>
+          <h1>A Wazuh agent for phones that are not rooted.</h1>
+          <p class="lede">A native Kotlin app. It enrolls with a Wazuh manager through <code>wazuh-authd</code>, then speaks the regular agent protocol to <code>wazuh-remoted</code>, so the phone shows up in the dashboard as a normal active agent.</p>
+          <p class="lede">Enrollment and the message codec live in <code>protocol/</code>. The phone app, collectors, and queue live in <code>app/</code>.</p>
+          <p class="actions">
+            <a class="btn" href="install.html">Install on a phone</a>
+            <a class="btn btn-ghost" href="https://github.com/skuilplek/wazuh-android-agent">Source</a>
+          </p>
+        </div>
+        <dl class="ledger">
+          <div>
+            <dt>Enrollment</dt>
+            <dd>TLS · port 1515</dd>
+          </div>
+          <div>
+            <dt>Session</dt>
+            <dd>AES · port 1514</dd>
+          </div>
+          <div>
+            <dt>Minimum</dt>
+            <dd>Android 8 · SDK 26</dd>
+          </div>
+          <div>
+            <dt>Root</dt>
+            <dd>Not required</dd>
+          </div>
+        </dl>
+      </div>
+      <div class="wrap">
+        <figure class="diagram">
+          <picture>
+            <source media="(min-width: 760px)" srcset="img/enroll.svg">
+            <img src="img/enroll-stack.svg" width="360" height="512" alt="The phone enrolls with wazuh-authd over TLS on port 1515, then keeps an AES session with wazuh-remoted on port 1514. The manager shows the phone as an active agent.">
+          </picture>
+          <figcaption>Enrollment, then the ordinary agent session.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <div class="wrap">
+      <section class="spec" id="reports">
+        <p class="spec-no">01</p>
+        <div>
+          <h2>What the phone reports</h2>
+          <p>Events are JSON with an <code>android</code> root object. The stock JSON decoder on the manager parses them. No custom decoder is required.</p>
+          <ol class="rows">
+            <li>
+              <h3>Posture</h3>
+              <p>Screen lock, encryption, patch age, developer options, USB and wireless debugging, root and emulator indicators, verified boot, and device admin, accessibility, and notification-listener apps.</p>
+            </li>
+            <li>
+              <h3>Apps</h3>
+              <p>Installs, updates, and removals, with the installer, a sideload flag, and granted dangerous permissions. The first run after enrollment sends a full inventory.</p>
+            </li>
+            <li>
+              <h3>Network</h3>
+              <p>Changes in transport, VPN, addresses, DNS, and Wi-Fi security. The Wi-Fi name is included only if you grant location permission.</p>
+            </li>
+            <li>
+              <h3>Failed unlocks</h3>
+              <p>Each wrong PIN, pattern, or password, if you turn on the agent’s device admin. The manager alerts on 5 failures within 5 minutes. The admin only uses the watch-login policy. It cannot lock, wipe, or change the phone.</p>
+            </li>
+            <li>
+              <h3>Capabilities</h3>
+              <p>What this phone can and cannot see: device admin, Device Owner, location, and battery exemption. Sent with each posture report and shown in the app. The Status tab lists anything still missing under Needs attention.</p>
+            </li>
+            <li>
+              <h3>Owner logs</h3>
+              <p>On a Device Owner phone only: ADB shell commands, CA certificate installs, logging stopped, storage mounts, and DNS lookups and connections per app. Android delivers these logs in batches, often an hour or more apart.</p>
+            </li>
+            <li>
+              <h3>Agent log</h3>
+              <p>The app’s own errors and crashes.</p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="spec" id="queue">
+        <p class="spec-no">02</p>
+        <div>
+          <h2>Offline queue</h2>
+          <p>Events wait in a local database while the phone is offline. The Events tab lists the last 500 events since the app started, whether each was sent yet, and the full JSON on tap. It has search, a filter per event type, and a pause button.</p>
+          <p>The phone keeps a regular agent session. When keepalives stop, the manager marks it disconnected and raises rule 504, after the manager’s disconnection time (10 minutes by default).</p>
+        </div>
+      </section>
+
+      <section class="spec" id="limits">
+        <p class="spec-no">03</p>
+        <div>
+          <h2>What it cannot see</h2>
+          <p>Without root, the agent cannot read the system logcat, monitor system file integrity, or see other apps’ data. Security log and network log events need Device Owner mode, which needs a factory-reset phone. Failed unlocks are reported only while the agent’s device admin is on.</p>
+          <p>Remote upgrades (WPK), active response, and remote configuration queries are not supported. Some OEM builds kill background services even with the battery exemption. On those phones, also allow-list the app in the vendor’s battery settings.</p>
+          <p class="next">
+            <span>Next</span>
+            <a href="install.html">Install on a phone</a>
+          </p>
+        </div>
+      </section>
+    </div>
+  </main>
+  <footer class="site-footer">
+    <div class="wrap foot">
+      <p>Android agent · version 0.3.0</p>
+      <a href="https://github.com/skuilplek/wazuh-android-agent">github.com/skuilplek/wazuh-android-agent</a>
+    </div>
+  </footer>
+  <script src="js/site.js"></script>
+</body>
+</html>
