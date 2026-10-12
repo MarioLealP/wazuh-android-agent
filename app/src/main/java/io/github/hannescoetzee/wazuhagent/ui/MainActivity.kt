@@ -21,12 +21,6 @@ import io.github.hannescoetzee.wazuhagent.collectors.Capability
 import io.github.hannescoetzee.wazuhagent.ui.theme.WazuhTheme
 
 class MainActivity : ComponentActivity() {
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-        maybeRequestBatteryExemption(intent)
-    }
-
     private val viewModel: MainViewModel by viewModels()
     private val capabilities = mutableStateOf(emptyList<Capability>())
 
@@ -53,7 +47,6 @@ class MainActivity : ComponentActivity() {
                 AppScaffold(viewModel = viewModel, capabilities = caps, permissions = permissions)
             }
         }
-        maybeRequestBatteryExemption(intent)
     }
 
     override fun onResume() {
@@ -81,12 +74,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun maybeRequestBatteryExemption(intent: Intent?) {
-        if (intent?.getBooleanExtra(EXTRA_REQUEST_BATTERY, false) != true) return
-        intent.removeExtra(EXTRA_REQUEST_BATTERY)
-        requestBatteryExemption()
-    }
-
     // Sideloaded security agent: a persistent connection is the point of the app.
     @SuppressLint("BatteryLife")
     private fun requestBatteryExemption() {
@@ -100,9 +87,5 @@ class MainActivity : ComponentActivity() {
         val intent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:$packageName"))
         runCatching { startActivity(intent) }
             .onFailure { runCatching { startActivity(Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM)) } }
-    }
-
-    companion object {
-        const val EXTRA_REQUEST_BATTERY = "io.github.hannescoetzee.wazuhagent.REQUEST_BATTERY"
     }
 }

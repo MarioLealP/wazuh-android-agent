@@ -48,7 +48,7 @@ object Notifications {
             .setContentIntent(open)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
         if (!ignoringBatteryOptimizations(context)) {
-            builder.addAction(0, "Unrestrict", unrestrictPendingIntent(context))
+            builder.addAction(0, "Unrestrict", openAppPendingIntent(context))
         }
         builder.addAction(0, "Stop", stop)
         return builder.build()
@@ -57,14 +57,10 @@ object Notifications {
     private fun ignoringBatteryOptimizations(context: Context): Boolean =
         context.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(context.packageName)
 
-    /** Opens the app, which asks for the exemption. Settings is not launched from the service. */
-    private fun unrestrictPendingIntent(context: Context): PendingIntent {
-        val open = Intent(context, MainActivity::class.java)
-            .setFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            .putExtra(MainActivity.EXTRA_REQUEST_BATTERY, true)
-        return PendingIntent.getActivity(
-            context, 3, open,
+    /** Opens the app. The Status screen asks for the exemption; the service does not. */
+    private fun openAppPendingIntent(context: Context): PendingIntent =
+        PendingIntent.getActivity(
+            context, 3, Intent(context, MainActivity::class.java),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-    }
 }

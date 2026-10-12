@@ -16,8 +16,11 @@ class PostureWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         val app = applicationContext.app
         if (app.store.agentKey == null || !app.store.agentEnabled) return Result.success()
         // A worker cannot start a foreground service on Android 12+. The exact alarm can.
+        // Skip it while the service is already up; task removal arms its own alarm.
         // A force-stop from system settings still will not come back until the next open or reboot.
-        AgentForegroundService.scheduleRestart(applicationContext)
+        if (!AgentForegroundService.isRunning) {
+            AgentForegroundService.scheduleRestart(applicationContext)
+        }
         return runCatching {
             PostureCollector(applicationContext).collectAndReport(app.queue)
             PackageCollector(applicationContext, app.queue).reconcile()

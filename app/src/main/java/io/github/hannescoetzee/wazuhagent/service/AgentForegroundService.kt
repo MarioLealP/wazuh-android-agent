@@ -85,6 +85,7 @@ class AgentForegroundService : Service() {
             return START_NOT_STICKY
         }
         wantsToStop = false
+        isRunning = true
         acquireLocks()
         startInForeground()
         if (loop?.isActive != true) {
@@ -259,15 +260,28 @@ class AgentForegroundService : Service() {
     }
 
     override fun onDestroy() {
+        isRunning = false
+        releaseLocks()
         collectors?.stop()
         val conn = connection
-        runBlocking(Dispatchers.IO) {
-            withTimeoutOrNull(3_000) { conn?.shutdown() }
+        // shutdown() sends before it closes. A blocked write ignores the timeout, so the
+        // flush runs as its own job and the socket is closed if that send does not return.
+        val flushScope = CoroutineScope(Dispatchers.IO)
+        val flush = flushScope.launch { conn?.shutdown() }
+        try {
+            runBlocking(Dispatchers.IO) {
+                if (withTimeoutOrNull(FLUSH_TIMEOUT_MS) { flush.join() } == null) {
+                    conn?.close()
+                    if (withTimeoutOrNull(CLOSE_JOIN_MS) { flush.join() } == null) flush.cancel()
+                }
+            }
+        } finally {
+            flush.cancel()
+            flushScope.cancel()
+            scope.cancel()
+            AgentState.set(ConnectionState.STOPPED)
+            super.onDestroy()
         }
-        scope.cancel()
-        releaseLocks()
-        AgentState.set(ConnectionState.STOPPED)
-        super.onDestroy()
     }
 
     companion object {
@@ -284,9 +298,19 @@ class AgentForegroundService : Service() {
         private const val IDLE_POLL_MS = 30_000L
         /** Keeps bursts (e.g. the first package inventory) well under the manager's EPS limits. */
         private const val SEND_SPACING_MS = 10L
+        private const val FLUSH_TIMEOUT_MS = 3_000L
+        /** Matches the reader join inside [io.github.hannescoetzee.wazuhagent.protocol.AgentConnection.close]. */
+        private const val CLOSE_JOIN_MS = 2_000L
 
         /** Set by Stop. onDestroy does not clear agentEnabled. */
         @Volatile private var wantsToStop = false
+
+        /**
+         * True from a successful start until [onDestroy]. A killed process comes back false,
+         * so the posture worker can schedule a restart. Task removal does not check this.
+         */
+        @Volatile var isRunning: Boolean = false
+            private set
 
         fun start(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, AgentForegroundService::class.java))
