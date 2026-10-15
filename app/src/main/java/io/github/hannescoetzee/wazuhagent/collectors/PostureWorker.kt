@@ -18,7 +18,9 @@ class PostureWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         // A worker cannot start a foreground service on Android 12+. The exact alarm can.
         // Skip it while the service is already up; task removal arms its own alarm.
         // A force-stop from system settings still will not come back until the next open or reboot.
-        if (!AgentForegroundService.isRunning) {
+        // Without exact alarms this stays quiet: posture already reports the exact_alarm
+        // capability, and a warning every run would raise rule 100271 every 15 minutes.
+        if (!AgentForegroundService.isRunning && AgentForegroundService.canScheduleRestart(applicationContext)) {
             AgentForegroundService.scheduleRestart(applicationContext)
         }
         return runCatching {

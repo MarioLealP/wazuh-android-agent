@@ -132,7 +132,7 @@ class AgentForegroundService : Service() {
         if (!power.isHeld) power.acquire()
 
         val wifi = wifiLock ?: applicationContext.getSystemService(WifiManager::class.java)
-            .createWifiLock(wifiLockMode(), WIFILOCK_TAG)
+            .createWifiLock(WIFILOCK_MODE, WIFILOCK_TAG)
             .apply { setReferenceCounted(false) }
             .also { wifiLock = it }
         if (!wifi.isHeld) {
@@ -261,23 +261,21 @@ class AgentForegroundService : Service() {
 
     override fun onDestroy() {
         isRunning = false
-        releaseLocks()
         collectors?.stop()
         val conn = connection
         // shutdown() sends before it closes. A blocked write ignores the timeout, so the
         // flush runs as its own job and the socket is closed if that send does not return.
+        // Closing the socket fails the stuck write, so the flush job ends without a second wait.
         val flushScope = CoroutineScope(Dispatchers.IO)
         val flush = flushScope.launch { conn?.shutdown() }
         try {
             runBlocking(Dispatchers.IO) {
-                if (withTimeoutOrNull(FLUSH_TIMEOUT_MS) { flush.join() } == null) {
-                    conn?.close()
-                    if (withTimeoutOrNull(CLOSE_JOIN_MS) { flush.join() } == null) flush.cancel()
-                }
+                if (withTimeoutOrNull(FLUSH_TIMEOUT_MS) { flush.join() } == null) conn?.close()
             }
         } finally {
             flush.cancel()
             flushScope.cancel()
+            releaseLocks()
             scope.cancel()
             AgentState.set(ConnectionState.STOPPED)
             super.onDestroy()
@@ -288,6 +286,12 @@ class AgentForegroundService : Service() {
         private const val ACTION_STOP = "io.github.hannescoetzee.wazuhagent.STOP"
         private const val WAKELOCK_TAG = "wazuhagent:service-wakelock"
         private const val WIFILOCK_TAG = "wazuhagent:service-wifilock"
+        /**
+         * Not LOW_LATENCY: that lock is only active with the screen on and the app in the
+         * foreground. Newer Wi-Fi modules turn HIGH_PERF into LOW_LATENCY by themselves.
+         */
+        @Suppress("DEPRECATION")
+        private const val WIFILOCK_MODE = WifiManager.WIFI_MODE_FULL_HIGH_PERF
         private const val RESTART_REQUEST_CODE = 2
         private const val RESTART_DELAY_MS = 1_000L
         private const val INITIAL_BACKOFF_MS = 5_000L
@@ -298,9 +302,12 @@ class AgentForegroundService : Service() {
         private const val IDLE_POLL_MS = 30_000L
         /** Keeps bursts (e.g. the first package inventory) well under the manager's EPS limits. */
         private const val SEND_SPACING_MS = 10L
-        private const val FLUSH_TIMEOUT_MS = 3_000L
-        /** Matches the reader join inside [io.github.hannescoetzee.wazuhagent.protocol.AgentConnection.close]. */
-        private const val CLOSE_JOIN_MS = 2_000L
+        /**
+         * onDestroy blocks the main thread for this plus the 2 s reader join in
+         * [io.github.hannescoetzee.wazuhagent.protocol.AgentConnection.close]. Keep the sum under
+         * the 5 s input-dispatch ANR.
+         */
+        private const val FLUSH_TIMEOUT_MS = 2_000L
 
         /** Set by Stop. onDestroy does not clear agentEnabled. */
         @Volatile private var wantsToStop = false
@@ -331,11 +338,11 @@ class AgentForegroundService : Service() {
          */
         fun scheduleRestart(context: Context) {
             if (!context.app.store.agentEnabled) return
-            val alarm = context.getSystemService(AlarmManager::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarm.canScheduleExactAlarms()) {
+            if (!canScheduleRestart(context)) {
                 AgentLog.warn("Exact alarms are not allowed, so the agent cannot restart from the background")
                 return
             }
+            val alarm = context.getSystemService(AlarmManager::class.java)
             val pending = restartPendingIntent(context, PendingIntent.FLAG_UPDATE_CURRENT) ?: return
             if (!context.app.store.agentEnabled) return
             runCatching {
@@ -348,6 +355,11 @@ class AgentForegroundService : Service() {
             // Stop can land while the alarm is being armed.
             if (!context.app.store.agentEnabled) cancelRestart(context)
         }
+
+        /** False on Android 12 when the user has turned off "Alarms and reminders". */
+        fun canScheduleRestart(context: Context): Boolean =
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                context.getSystemService(AlarmManager::class.java).canScheduleExactAlarms()
 
         private fun cancelRestart(context: Context) {
             val pending = restartPendingIntent(context, PendingIntent.FLAG_NO_CREATE) ?: return
@@ -362,10 +374,5 @@ class AgentForegroundService : Service() {
                 PendingIntent.FLAG_IMMUTABLE or mutabilityExtra,
             )
         }
-
-        @Suppress("DEPRECATION")
-        private fun wifiLockMode(): Int =
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) WifiManager.WIFI_MODE_FULL_LOW_LATENCY
-            else WifiManager.WIFI_MODE_FULL_HIGH_PERF
     }
 }
