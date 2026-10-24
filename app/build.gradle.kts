@@ -5,6 +5,12 @@ plugins {
     alias(libs.plugins.ksp)
 }
 
+/** CI build number, read as a Gradle property or environment variable. */
+val BUILD_NUMBER = "WAZUH_AGENT_BUILD_NUMBER"
+
+/** Room for this many CI builds per app version; versionCode stays below Int.MAX_VALUE up to app versionCode 21474. */
+val BUILDS_PER_VERSION = 100_000
+
 android {
     namespace = "io.github.hannescoetzee.wazuhagent"
     compileSdk = 35
@@ -15,6 +21,15 @@ android {
         targetSdk = 35
         versionCode = 3
         versionName = "0.3.0"
+
+        // CI builds append their build number so every build installs as an update over the last one.
+        providers.gradleProperty(BUILD_NUMBER).orElse(providers.environmentVariable(BUILD_NUMBER)).orNull?.takeIf { it.isNotBlank() }
+            ?.let { raw ->
+                val build = raw.toIntOrNull()?.takeIf { it in 0 until BUILDS_PER_VERSION }
+                    ?: throw GradleException("$BUILD_NUMBER must be a number from 0 to ${BUILDS_PER_VERSION - 1}, got '$raw'")
+                versionCode = checkNotNull(versionCode) * BUILDS_PER_VERSION + build
+                versionName = "$versionName-ci$build"
+            }
     }
 
     signingConfigs {
